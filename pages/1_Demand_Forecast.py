@@ -6,6 +6,7 @@ from io import BytesIO
 from sklearn.linear_model import LinearRegression
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 import plotly.express as px
+import datetime
 
 # ---------------------- PAGE CONTROL -----------------------
 st.set_page_config(page_title="Forecast Tool", layout="wide")
@@ -166,10 +167,15 @@ if st.session_state.page == "config":
                 fitted_model = model.fit(smoothing_level=alpha, optimized=False)
                 forecast = fitted_model.forecast(forecast_periods)
 
-            base_index = int(group["Week_Num"].max())
+
+            # Tahmin başlangıcını son satış tarihine göre ayarla
+            last_date = pd.to_datetime(st.session_state["df_full"]["Sales_Date"].max()).date() \
+                if "df_full" in st.session_state else datetime.date.today()
+            forecast_dates = [last_date + datetime.timedelta(weeks=i + 1) for i in range(forecast_periods)]
+            forecast_periods_iso = [f"{d.isocalendar()[0]}-W{str(d.isocalendar()[1]).zfill(2)}" for d in forecast_dates]
 
             for i, f in enumerate(forecast):
-                period_label = f"{date_prefix}{base_index + i + 1}"
+                period_label = f"W{i + 1}"
                 result_df = pd.concat([result_df, pd.DataFrame({
                     "Product_ID": [pid],
                     "Product_Name": [product_name],
@@ -177,6 +183,7 @@ if st.session_state.page == "config":
                     "Forecast_Quantity": [int(f)],
                     "Method": [forecast_model]
                 })])
+
 
         st.session_state["forecast_df"] = result_df
         st.session_state.page = "result"
