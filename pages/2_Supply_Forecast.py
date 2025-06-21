@@ -192,5 +192,3 @@ elif st.session_state.supply_page == "result":
     # Back button
     if st.button("🔁 Back to Configuration"):
         st.session_state.supply_page = "config"
-
-
