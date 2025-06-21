@@ -60,6 +60,7 @@ if st.session_state.supply_page == "config":
 
             df = df.sort_values("Sales_Date")
             df["Week_Num"] = df["Sales_Date"].rank(method="dense").astype(int)
+            df["Week_Num"] = df["Week_Num"] - df["Week_Num"].min() + 1  # Start from 1
 
             df = df.groupby(["Week_Num", "Product_ID", "Product_Name"], as_index=False).agg({
                 "Sales_Quantity": "sum",
@@ -122,67 +123,74 @@ if st.session_state.supply_page == "config":
 # ------------------------------ PAGE 2 - SUPPLY RESULT ------------------------------
 elif st.session_state.supply_page == "result":
     st.title("🚚 Supply Forecast Result")
+
     df = st.session_state.supply_df
     result_df = st.session_state.supply_result_df
 
-    col1, col2 = st.columns(2)
+    # Forecast result table preview (top section)
+    st.subheader("🔍 Supply Forecast Table")
+    product_list = sorted(result_df["Product_Name"].unique().tolist())
+    selected_product_table = st.selectbox("Filter forecast table by product:", ["All Products"] + product_list)
 
-    with col1:
-        st.markdown("### 🧭 Weekly Sales Trend")
+    if selected_product_table == "All Products":
+        filtered_result = result_df
+    else:
+        filtered_result = result_df[result_df["Product_Name"] == selected_product_table]
 
-        product_list = sorted(df["Product_Name"].unique().tolist())
-        selected_product = st.selectbox("Select a product to visualize:", product_list)
+    st.dataframe(filtered_result.head(100))
 
-        product_df = df[df["Product_Name"] == selected_product].copy()
-        product_df = product_df.sort_values("Week_Num")
-        product_df["Week_Label"] = product_df["Week_Num"].apply(lambda x: f"W{x}")
+    # Download option
+    download_format = st.selectbox("Download Format:", ["CSV", "Excel"])
+    if download_format == "CSV":
+        csv = result_df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download Forecast (CSV)", data=csv, file_name="supply_forecast.csv", mime="text/csv")
+    elif download_format == "Excel":
+        try:
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                result_df.to_excel(writer, index=False, sheet_name="Supply Forecast")
+            st.download_button("⬇️ Download Forecast (Excel)", data=buffer.getvalue(),
+                               file_name="supply_forecast.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except ModuleNotFoundError:
+            st.error("❌ Excel export failed. Please install `xlsxwriter`: `pip install xlsxwriter`")
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=product_df["Week_Label"],
-            y=product_df["Sales_Quantity"],
-            mode="lines+markers+text",
-            name=selected_product,
-            text=product_df["Sales_Quantity"],
-            textposition="top center",
-            marker=dict(size=8),
-            line=dict(width=3)
-        ))
+    # Weekly Sales Trend (bottom section)
+    st.markdown("### 📈 Weekly Sales Trend")
+    product_list = sorted(df["Product_Name"].unique().tolist())
+    selected_graph_product = st.selectbox("Select a product to visualize trend:", product_list)
 
-        fig.update_layout(
-            title=f"Weekly Sales: {selected_product}",
-            xaxis_title="Week",
-            yaxis_title="Sales Quantity",
-            hovermode="x unified",
-            template="plotly_white",
-            height=600,
-            font=dict(size=14, color="black"),
-            margin=dict(l=30, r=30, t=60, b=60),
-        )
+    product_df = df[df["Product_Name"] == selected_graph_product].copy()
+    product_df = product_df.sort_values("Week_Num")
+    product_df["Week_Label"] = product_df["Week_Num"].apply(lambda x: f"W{x}")
 
-        st.plotly_chart(fig, use_container_width=True)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=product_df["Week_Label"],
+        y=product_df["Sales_Quantity"],
+        mode="lines+markers+text",
+        name=selected_graph_product,
+        text=product_df["Sales_Quantity"],
+        textposition="top center",
+        marker=dict(size=8),
+        line=dict(width=3)
+    ))
 
-    with col2:
-        st.markdown("### 🔍 Supply Forecast Preview")
+    fig.update_layout(
+        title=f"Weekly Sales Trend: {selected_graph_product}",
+        xaxis_title="Week",
+        yaxis_title="Sales Quantity",
+        hovermode="x unified",
+        template="plotly_white",
+        height=600,
+        font=dict(size=14, color="black"),
+        margin=dict(l=30, r=30, t=60, b=60),
+    )
 
-        st.dataframe(result_df.head(100))
+    st.plotly_chart(fig, use_container_width=True)
 
-        download_format = st.selectbox("Download Format:", ["CSV", "Excel"])
-
-        if download_format == "CSV":
-            csv = result_df.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Forecast (CSV)", data=csv, file_name="supply_forecast.csv", mime="text/csv")
-
-        elif download_format == "Excel":
-            try:
-                buffer = BytesIO()
-                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                    result_df.to_excel(writer, index=False, sheet_name="Supply Forecast")
-                st.download_button("⬇️ Download Forecast (Excel)", data=buffer.getvalue(),
-                                   file_name="supply_forecast.xlsx",
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            except ModuleNotFoundError:
-                st.error("❌ Excel export failed. Please install `xlsxwriter`: `pip install xlsxwriter`")
-
+    # Back button
     if st.button("🔁 Back to Configuration"):
         st.session_state.supply_page = "config"
+
+
